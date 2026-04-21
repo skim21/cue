@@ -23,7 +23,7 @@ class MockPeopleSimRepository @Inject constructor() : PeopleSimRepository {
     }
 
     override suspend fun generateScenarios(
-        context: String, persona: String, name: String,
+        context: String, persona: String, name: String, mode: String,
     ): Result<List<ConversationScenario>> {
         delay(1000L)
         return Result.success(listOf(
