@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Cue</string>
+    <string name="process_text_label">Cue — 답장 제안</string>
+    <string name="reply_copied">복사됐어!</string>
+    <string name="error_generating_replies">답장 생성에 실패했어. 다시 시도해줘.</string>
+    <string name="loading_replies">답장 후보 생성 중…</string>
+</resources>

@@ -1,0 +1,5 @@
+{
+  "chatBubbleClass": "com.kakao.talk.widget.chat.ChatBubbleView",
+  "senderNameId": "sender_name",
+  "messageBodyId": "message_body"
+}
