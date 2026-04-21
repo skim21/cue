@@ -6,65 +6,69 @@ data class KakaoConversation(
     val totalMessages: Int,
 )
 
+data class KakaoParsed(
+    val speakers: List<String>,          // 등장인물 목록 (많이 말한 순)
+    val allLines: List<String>,          // 형식 파싱 성공 시 전체 줄 (발신자 포함)
+    val rawLines: List<String>,          // 형식 파싱 실패 시 fallback용 원본 줄
+)
+
 object KakaoParser {
 
-    // 새 형식:  [홍길동] [오전 10:00] 안녕!
     private val NEW_FMT = Regex("""^\[([^\]]+)] \[(?:오전|오후) \d+:\d+] (.+)$""")
-
-    // 구 형식:  2024년 1월 1일 오전 10:00, 홍길동 : 안녕!
     private val OLD_FMT = Regex("""\d{4}년 \d+월 \d+일 (?:오전|오후) \d+:\d+, (.+?) : (.+)""")
-
-    // 날짜/시스템 줄 패턴 (건너뜀)
     private val DATE_LINE = Regex("""^\d{4}년 \d+월 \d+일.{0,20}$""")
 
-    fun parse(text: String): KakaoConversation? {
+    // 1MB로 잘라서 파싱
+    fun preparse(text: String): KakaoParsed {
         val lines = text.lines()
+        val senderCount = mutableMapOf<String, Int>()
+        val structuredLines = mutableListOf<String>()
+        var hasStructure = false
 
-        // 헤더에서 대화상대 추출
-        val partnerName = lines.firstOrNull { it.startsWith("대화상대:") }
-            ?.removePrefix("대화상대:")?.trim()
-            ?: inferPartnerName(lines)
-
-        // 형식 파싱 시도
-        if (partnerName != null) {
-            val partnerMessages = mutableListOf<String>()
-            var totalMessages = 0
-
-            for (line in lines) {
-                val trimmed = line.trim()
-                val matched = NEW_FMT.matchEntire(trimmed)?.destructured?.let { (sender, msg) ->
-                    totalMessages++
-                    if (sender == partnerName) partnerMessages.add(msg)
-                    true
-                } ?: OLD_FMT.matchEntire(trimmed)?.destructured?.let { (sender, msg) ->
-                    totalMessages++
-                    if (sender == partnerName) partnerMessages.add(msg)
-                    true
-                }
-            }
-
-            if (partnerMessages.isNotEmpty()) {
-                return KakaoConversation(partnerName, partnerMessages, totalMessages)
+        for (line in lines) {
+            val trimmed = line.trim()
+            NEW_FMT.matchEntire(trimmed)?.destructured?.let { (sender, _) ->
+                senderCount[sender] = (senderCount[sender] ?: 0) + 1
+                structuredLines.add(trimmed)
+                hasStructure = true
+                return@let
+            } ?: OLD_FMT.matchEntire(trimmed)?.destructured?.let { (sender, _) ->
+                senderCount[sender] = (senderCount[sender] ?: 0) + 1
+                structuredLines.add(trimmed)
+                hasStructure = true
             }
         }
 
-        // 형식 파싱 실패 → 모든 텍스트 줄을 그대로 전달 (서버 Claude가 분석)
-        val allLines = lines
-            .map { it.trim() }
-            .filter { it.isNotBlank() && !DATE_LINE.matches(it) }
-        if (allLines.isEmpty()) return null
+        // 많이 말한 순으로 정렬
+        val speakers = senderCount.entries.sortedByDescending { it.value }.map { it.key }
 
-        // 이름을 못 찾으면 null 이름으로 반환 (ImportActivity에서 이름 입력 처리)
-        return KakaoConversation(
-            partnerName = partnerName ?: "",
-            partnerMessages = allLines,
-            totalMessages = allLines.size,
-        )
+        val rawLines = if (!hasStructure) {
+            lines.map { it.trim() }.filter { it.isNotBlank() && !DATE_LINE.matches(it) }
+        } else emptyList()
+
+        return KakaoParsed(speakers = speakers, allLines = structuredLines, rawLines = rawLines)
     }
 
-    private fun inferPartnerName(lines: List<String>): String? =
-        lines.mapNotNull { NEW_FMT.find(it)?.groupValues?.get(1) }
-            .groupBy { it }
-            .maxByOrNull { it.value.size }
-            ?.key
+    fun extract(parsed: KakaoParsed, partnerName: String): KakaoConversation {
+        if (parsed.allLines.isEmpty()) {
+            // 형식 없음 → 전체 텍스트로 분석
+            return KakaoConversation(partnerName, parsed.rawLines, parsed.rawLines.size)
+        }
+
+        val partnerMessages = mutableListOf<String>()
+        var totalMessages = 0
+
+        for (line in parsed.allLines) {
+            NEW_FMT.matchEntire(line)?.destructured?.let { (sender, msg) ->
+                totalMessages++
+                if (sender == partnerName) partnerMessages.add(msg)
+                return@let
+            } ?: OLD_FMT.matchEntire(line)?.destructured?.let { (sender, msg) ->
+                totalMessages++
+                if (sender == partnerName) partnerMessages.add(msg)
+            }
+        }
+
+        return KakaoConversation(partnerName, partnerMessages.ifEmpty { parsed.rawLines }, totalMessages)
+    }
 }
