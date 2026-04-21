@@ -34,7 +34,7 @@ jobs:
           echo "api.base.url=https://buddy.ppai-lab.com/" >> local.properties
           echo "api.key=none" >> local.properties
 
-      - name: Build Release APK
+      - name: Build & Sign Release APK
         run: ./gradlew assembleRelease
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/cue.keystore
@@ -42,47 +42,30 @@ jobs:
           KEY_ALIAS: cue
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
-      - name: Sign APK
-        uses: r0adkll/sign-android-release@v1
-        id: sign_apk
-        with:
-          releaseDirectory: app/build/outputs/apk/release
-          signingKeyBase64: ${{ secrets.KEYSTORE_BASE64 }}
-          alias: cue
-          keyStorePassword: ${{ secrets.KEYSTORE_PASSWORD }}
-          keyPassword: ${{ secrets.KEY_PASSWORD }}
-
-      - name: Get version name
-        id: version
+      - name: Rename APK
         run: |
-          VERSION=$(grep "versionName" app/build.gradle.kts | grep -oP '"\K[^"]+')
+          VERSION=$(grep 'versionName' app/build.gradle.kts | grep -oP '"[^"]+"' | tr -d '"' | head -1)
           BUILD=${{ github.run_number }}
-          echo "name=v${VERSION}-build${BUILD}" >> $GITHUB_OUTPUT
+          mv app/build/outputs/apk/release/app-release.apk cue-v${VERSION}-build${BUILD}.apk
+          echo "APK_NAME=cue-v${VERSION}-build${BUILD}.apk" >> $GITHUB_ENV
+          echo "RELEASE_TAG=v${VERSION}-build${BUILD}" >> $GITHUB_ENV
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.version.outputs.name }}
-          name: "Cue ${{ steps.version.outputs.name }}"
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: "Cue ${{ env.RELEASE_TAG }}"
           body: |
             ## Cue Android 앱
 
             **설치 방법**
-            1. 아래 `cue-release.apk` 다운로드
+            1. 아래 APK 파일 다운로드
             2. 폰에서 파일 열기
             3. "알 수 없는 앱 허용" → 설치
             4. 앱 열고 "시작하기" 탭
 
             > 카카오톡에서 메시지 선택 → "Cue 답장" → AI 답장 3개 즉시 제안
-          files: ${{ steps.sign_apk.outputs.signedReleaseFile }}
+          files: ${{ env.APK_NAME }}
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Update download page
-        run: |
-          RELEASE_URL="https://github.com/skim21/cue/releases/latest/download/cue-release-unsigned-signed.apk"
-          curl -X POST "https://buddy.ppai-lab.com/api/cue/release-hook" \
-            -H "Content-Type: application/json" \
-            -d "{\"version\": \"${{ steps.version.outputs.name }}\", \"url\": \"$RELEASE_URL\"}" \
-            || true  # 실패해도 빌드는 성공
