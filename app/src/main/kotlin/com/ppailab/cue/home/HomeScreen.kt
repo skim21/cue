@@ -1,5 +1,8 @@
 package com.ppailab.cue.home
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -15,11 +18,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.ppailab.cue.floating.FloatingService
 import com.ppailab.cue.persona.SavedPersona
 import java.text.SimpleDateFormat
 import java.util.*
@@ -31,13 +36,56 @@ fun HomeScreen(
     onImportTap: () -> Unit,
     vm: HomeViewModel = hiltViewModel(),
 ) {
+    val context = LocalContext.current
     val personas by vm.personas.collectAsState()
     var deleteTarget by remember { mutableStateOf<SavedPersona?>(null) }
+    var bubbleOn by remember { mutableStateOf(false) }
+
+    // 오버레이 권한 확인 + 버블 상태 동기화
+    LaunchedEffect(Unit) {
+        bubbleOn = Settings.canDrawOverlays(context)
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Cue", fontWeight = FontWeight.Bold, fontSize = 22.sp) },
+                actions = {
+                    // 버블 토글
+                    Row(
+                        modifier = Modifier.padding(end = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text("⚡버블", fontSize = 12.sp, color = Color.White.copy(alpha = .85f))
+                        Switch(
+                            checked = bubbleOn,
+                            onCheckedChange = { on ->
+                                if (on) {
+                                    if (Settings.canDrawOverlays(context)) {
+                                        FloatingService.start(context)
+                                        bubbleOn = true
+                                    } else {
+                                        // 오버레이 권한 요청
+                                        context.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                            Uri.parse("package:${context.packageName}")).apply {
+                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        })
+                                    }
+                                } else {
+                                    FloatingService.stop(context)
+                                    bubbleOn = false
+                                }
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = Color(0xFF5B21B6),
+                                uncheckedThumbColor = Color.White.copy(alpha = .7f),
+                                uncheckedTrackColor = Color.White.copy(alpha = .3f),
+                            ),
+                        )
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color(0xFF7C3AED),
                     titleContentColor = Color.White,

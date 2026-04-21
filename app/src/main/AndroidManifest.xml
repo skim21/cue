@@ -2,8 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- CLIPBOARD_SERVICE 는 시스템 서비스로 별도 permission 불필요, 명시적 선언 -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 
     <application
         android:name=".CueApplication"
@@ -14,7 +15,6 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Cue">
 
-        <!-- 메인 런처 액티비티 -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -25,6 +25,18 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- 플로팅 버블 서비스 -->
+        <service
+            android:name=".floating.FloatingService"
+            android:exported="false" />
+
+        <!-- 클립보드 → 답장 (버블 탭 시 열리는 투명 액티비티) -->
+        <activity
+            android:name=".floating.ClipboardReplyActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Cue.Transparent"
+            android:windowSoftInputMode="adjustResize" />
 
         <!-- Import 액티비티: 카카오톡 대화 내보내기 .txt 공유 수신 -->
         <activity
@@ -44,7 +56,7 @@
             </intent-filter>
         </activity>
 
-        <!-- ProcessText 액티비티: 텍스트 선택 시 공유 시트에 노출 -->
+        <!-- ProcessText 액티비티 -->
         <activity
             android:name=".processtext.ProcessTextActivity"
             android:exported="true"
