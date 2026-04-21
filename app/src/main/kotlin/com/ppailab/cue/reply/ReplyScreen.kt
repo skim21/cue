@@ -19,7 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.ppailab.cue.api.ReplyCandidate
+import com.ppailab.cue.api.ConversationScenario
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -32,57 +32,38 @@ fun ReplyScreen(
     val state by vm.state.collectAsState()
     val persona by vm.persona.collectAsState()
     var message by remember { mutableStateOf("") }
-    var snackMessage by remember { mutableStateOf("") }
-    val snackbarHostState = remember { SnackbarHostState() }
+    val snackState = remember { SnackbarHostState() }
+    var snack by remember { mutableStateOf("") }
 
     LaunchedEffect(personaId) { vm.loadPersona(personaId) }
-    LaunchedEffect(snackMessage) {
-        if (snackMessage.isNotEmpty()) {
-            snackbarHostState.showSnackbar(snackMessage)
-            snackMessage = ""
-        }
-    }
+    LaunchedEffect(snack) { if (snack.isNotEmpty()) { snackState.showSnackbar(snack); snack = "" } }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Column {
-                        Text(persona?.name ?: "답장 생성", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                        if (persona != null) {
-                            Text("맞춤 답장", fontSize = 12.sp, color = Color.White.copy(alpha = .8f))
-                        }
+                        Text(persona?.name ?: "시나리오 예측", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        Text("대화 흐름 예측", fontSize = 12.sp, color = Color.White.copy(alpha = .8f))
                     }
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로", tint = Color.White)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = Color.White)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color(0xFF7C3AED),
-                    titleContentColor = Color.White,
-                ),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF7C3AED), titleContentColor = Color.White),
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = { SnackbarHost(snackState) },
     ) { padding ->
         Column(
             modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             persona?.let {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F3FF)),
-                    shape = RoundedCornerShape(12.dp),
-                ) {
-                    Text(
-                        it.persona,
-                        modifier = Modifier.padding(12.dp),
-                        fontSize = 13.sp,
-                        color = Color(0xFF5B21B6),
-                        lineHeight = 19.sp,
-                    )
+                Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F3FF)), shape = RoundedCornerShape(12.dp)) {
+                    Text(it.persona, modifier = Modifier.padding(12.dp), fontSize = 13.sp, color = Color(0xFF5B21B6), lineHeight = 19.sp)
                 }
             }
 
@@ -91,44 +72,46 @@ fun ReplyScreen(
                 onValueChange = { message = it; if (state is ReplyUiState.Success) vm.reset() },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("상대방 메시지") },
-                placeholder = { Text("여기에 받은 메시지를 입력하세요") },
-                minLines = 3,
-                maxLines = 5,
+                placeholder = { Text("받은 메시지를 입력하세요") },
+                minLines = 2, maxLines = 4,
                 shape = RoundedCornerShape(12.dp),
             )
 
             Button(
                 onClick = { if (message.isNotBlank()) vm.generate(message) },
                 enabled = message.isNotBlank() && state !is ReplyUiState.Loading,
-                modifier = Modifier.fillMaxWidth().height(52.dp),
+                modifier = Modifier.fillMaxWidth().height(50.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED)),
                 shape = RoundedCornerShape(12.dp),
             ) {
                 if (state is ReplyUiState.Loading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        color = Color.White,
-                        strokeWidth = 2.dp,
-                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+                        Text("시나리오 예측 중...", fontSize = 15.sp)
+                    }
                 } else {
-                    Text("답장 생성", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Text("시나리오 예측", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
 
             when (val s = state) {
-                is ReplyUiState.Success -> {
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        items(s.replies) { reply ->
-                            ReplyCard(reply) {
-                                copyToClipboard(context, reply.text)
-                                snackMessage = "복사됐어!"
-                            }
-                        }
+                is ReplyUiState.Success -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    items(s.scenarios) { scenario ->
+                        ScenarioCard(
+                            scenario = scenario,
+                            partnerName = persona?.name ?: "상대방",
+                            onCopy = {
+                                val myLine = scenario.exchanges.firstOrNull { it.sender == "나" }?.message ?: ""
+                                if (myLine.isNotBlank()) {
+                                    (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
+                                        .setPrimaryClip(ClipData.newPlainText("cue", myLine))
+                                    snack = "복사됐어!"
+                                }
+                            },
+                        )
                     }
                 }
-                is ReplyUiState.Error -> {
-                    Text(s.message, color = Color(0xFFEF4444), fontSize = 14.sp)
-                }
+                is ReplyUiState.Error -> Text(s.message, color = Color(0xFFEF4444), fontSize = 14.sp)
                 else -> {}
             }
         }
@@ -136,43 +119,40 @@ fun ReplyScreen(
 }
 
 @Composable
-private fun ReplyCard(reply: ReplyCandidate, onCopy: () -> Unit) {
+fun ScenarioCard(scenario: ConversationScenario, partnerName: String, onCopy: () -> Unit) {
     Card(
+        onClick = onCopy,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        onClick = onCopy,
+        elevation = CardDefaults.cardElevation(2.dp),
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.Top,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Surface(
-                color = Color(0xFFEDE9FE),
-                shape = RoundedCornerShape(8.dp),
-            ) {
-                Text(
-                    reply.style,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF7C3AED),
-                )
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Surface(color = Color(0xFF7C3AED), shape = RoundedCornerShape(20.dp)) {
+                    Text("${scenario.probability}%", modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                }
+                Text(scenario.title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF1F2937), modifier = Modifier.weight(1f))
             }
-            Text(
-                reply.text,
-                modifier = Modifier.weight(1f),
-                fontSize = 15.sp,
-                color = Color(0xFF1F2937),
-                lineHeight = 22.sp,
-            )
+            HorizontalDivider(color = Color(0xFFF3F4F6))
+            scenario.exchanges.forEach { ex ->
+                val isMe = ex.sender == "나"
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = if (isMe) Arrangement.End else Arrangement.Start) {
+                    if (!isMe) {
+                        Column(horizontalAlignment = Alignment.Start, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(partnerName, fontSize = 10.sp, color = Color(0xFF9CA3AF))
+                            Surface(color = Color(0xFFF3F4F6), shape = RoundedCornerShape(4.dp, 12.dp, 12.dp, 12.dp)) {
+                                Text(ex.message, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp), fontSize = 13.sp, color = Color(0xFF1F2937))
+                            }
+                        }
+                    } else {
+                        Surface(color = Color(0xFF7C3AED), shape = RoundedCornerShape(12.dp, 4.dp, 12.dp, 12.dp)) {
+                            Text(ex.message, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp), fontSize = 13.sp, color = Color.White)
+                        }
+                    }
+                }
+            }
+            Text("탭 → 내 첫 답변 복사", fontSize = 11.sp, color = Color(0xFFD1D5DB), modifier = Modifier.align(Alignment.End))
         }
     }
-}
-
-private fun copyToClipboard(context: Context, text: String) {
-    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    cm.setPrimaryClip(ClipData.newPlainText("cue_reply", text))
 }

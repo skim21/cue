@@ -19,6 +19,7 @@
 -keep class com.ppailab.cue.api.** { *; }
 -keep class com.ppailab.cue.api.dto.** { *; }
 -keep class com.ppailab.cue.persona.** { *; }
+-keep class com.ppailab.cue.floating.** { *; }
 -keepclassmembers class com.ppailab.cue.** {
     <fields>;
 }

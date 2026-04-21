@@ -5,6 +5,7 @@ import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -19,8 +20,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
+import com.ppailab.cue.api.ConversationScenario
 import com.ppailab.cue.api.PeopleSimRepository
-import com.ppailab.cue.api.ReplyCandidate
 import com.ppailab.cue.persona.PersonaStore
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -34,64 +35,50 @@ class ClipboardReplyActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         val clipboard = (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
             .primaryClip?.getItemAt(0)?.text?.toString()?.trim() ?: ""
-
-        setContent {
-            MaterialTheme {
-                ReplySheet(
-                    clipboardText = clipboard,
-                    onDismiss = { finish() },
-                )
-            }
-        }
+        setContent { MaterialTheme { ScenarioSheet(clipboard) { finish() } } }
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
-    private fun ReplySheet(clipboardText: String, onDismiss: () -> Unit) {
+    private fun ScenarioSheet(clipboardText: String, onDismiss: () -> Unit) {
         val personas = remember { store.loadAll() }
-        var selectedPersonaIdx by remember { mutableIntStateOf(0) }
-        var replies by remember { mutableStateOf<List<ReplyCandidate>>(emptyList()) }
+        var selectedIdx by remember { mutableIntStateOf(0) }
+        var scenarios by remember { mutableStateOf<List<ConversationScenario>>(emptyList()) }
         var loading by remember { mutableStateOf(false) }
         var error by remember { mutableStateOf("") }
-        var snack by remember { mutableStateOf("") }
         val snackState = remember { SnackbarHostState() }
-        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        var snack by remember { mutableStateOf("") }
 
         LaunchedEffect(snack) {
             if (snack.isNotEmpty()) { snackState.showSnackbar(snack); snack = "" }
         }
 
-        // 클립보드 있으면 자동 생성
-        LaunchedEffect(clipboardText, selectedPersonaIdx) {
+        LaunchedEffect(clipboardText, selectedIdx) {
             if (clipboardText.isBlank()) return@LaunchedEffect
-            generate(clipboardText, selectedPersonaIdx, personas.map { it.persona }) { r, e ->
-                replies = r; error = e; loading = false
-            }.also { loading = true }
+            val p = personas.getOrNull(selectedIdx)
+            loading = true; error = ""; scenarios = emptyList()
+            repo.generateScenarios(clipboardText, p?.persona ?: "", p?.name ?: "상대방")
+                .onSuccess { scenarios = it; loading = false }
+                .onFailure { error = it.message ?: "오류"; loading = false }
         }
 
         Scaffold(snackbarHost = { SnackbarHost(snackState) }) { _ ->
             ModalBottomSheet(
                 onDismissRequest = onDismiss,
-                sheetState = sheetState,
-                containerColor = Color.White,
+                sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+                containerColor = Color(0xFFF9FAFB),
             ) {
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp)
-                        .padding(bottom = 32.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp).padding(bottom = 32.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    // 헤더
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("⚡ Cue 답장", fontWeight = FontWeight.Bold, fontSize = 18.sp, modifier = Modifier.weight(1f))
+                        Text("⚡ 대화 시나리오", fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.weight(1f))
                         TextButton(onClick = onDismiss) { Text("닫기", color = Color(0xFF9CA3AF)) }
                     }
 
-                    // 클립보드 미리보기
                     if (clipboardText.isBlank()) {
                         Surface(color = Color(0xFFFEF3C7), shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
                             Text("카톡 메시지를 먼저 복사하고 다시 탭해주세요", modifier = Modifier.padding(12.dp), fontSize = 14.sp, color = Color(0xFF92400E))
@@ -99,16 +86,17 @@ class ClipboardReplyActivity : ComponentActivity() {
                         return@ModalBottomSheet
                     }
 
-                    Surface(color = Color(0xFFF3F4F6), shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
-                        Text(clipboardText, modifier = Modifier.padding(10.dp), fontSize = 13.sp, color = Color(0xFF374151), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    // 클립보드 미리보기
+                    Surface(color = Color(0xFFEDE9FE), shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
+                        Text(clipboardText, modifier = Modifier.padding(10.dp), fontSize = 13.sp, color = Color(0xFF5B21B6), maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
 
-                    // 페르소나 선택 (여러 명 있을 때만)
+                    // 페르소나 선택
                     if (personas.size > 1) {
                         var expanded by remember { mutableStateOf(false) }
                         ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
                             OutlinedTextField(
-                                value = personas[selectedPersonaIdx].name,
+                                value = personas[selectedIdx].name,
                                 onValueChange = {},
                                 readOnly = true,
                                 label = { Text("상대방") },
@@ -118,40 +106,31 @@ class ClipboardReplyActivity : ComponentActivity() {
                             )
                             ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                                 personas.forEachIndexed { i, p ->
-                                    DropdownMenuItem(
-                                        text = { Text(p.name) },
-                                        onClick = { selectedPersonaIdx = i; expanded = false },
-                                    )
+                                    DropdownMenuItem(text = { Text(p.name) }, onClick = { selectedIdx = i; expanded = false })
                                 }
                             }
                         }
                     } else if (personas.isNotEmpty()) {
-                        Surface(color = Color(0xFFEDE9FE), shape = RoundedCornerShape(8.dp)) {
-                            Text(
-                                "👤 ${personas[0].name}",
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                fontSize = 13.sp, color = Color(0xFF5B21B6), fontWeight = FontWeight.Medium,
-                            )
-                        }
+                        Text("👤 ${personas[0].name}", fontSize = 13.sp, color = Color(0xFF5B21B6), fontWeight = FontWeight.Medium)
                     }
 
-                    // 결과
                     when {
-                        loading -> {
-                            Box(Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    CircularProgressIndicator(Modifier.size(20.dp), color = Color(0xFF7C3AED), strokeWidth = 2.dp)
-                                    Text("답장 생성 중...", fontSize = 14.sp, color = Color(0xFF6B7280))
-                                }
+                        loading -> Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                CircularProgressIndicator(Modifier.size(24.dp), color = Color(0xFF7C3AED), strokeWidth = 2.dp)
+                                Text("시나리오 예측 중...", fontSize = 13.sp, color = Color(0xFF6B7280))
                             }
                         }
                         error.isNotEmpty() -> Text(error, color = Color(0xFFEF4444), fontSize = 13.sp)
-                        replies.isNotEmpty() -> {
-                            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                items(replies) { reply ->
-                                    ReplyCard(reply) {
-                                        copyText(reply.text)
-                                        snack = "복사됐어!"
+                        scenarios.isNotEmpty() -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            items(scenarios) { s ->
+                                ScenarioCard(s, personas.getOrNull(selectedIdx)?.name ?: "상대방") {
+                                    // 내 첫 대사 복사
+                                    val myLine = s.exchanges.firstOrNull { it.sender == "나" }?.message ?: ""
+                                    if (myLine.isNotBlank()) {
+                                        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                        cm.setPrimaryClip(android.content.ClipData.newPlainText("cue", myLine))
+                                        snack = "복사됐어! 카톡에 붙여넣어봐"
                                     }
                                 }
                             }
@@ -161,45 +140,51 @@ class ClipboardReplyActivity : ComponentActivity() {
             }
         }
     }
-
-    private fun generate(
-        message: String,
-        personaIdx: Int,
-        personas: List<String>,
-        onResult: (List<ReplyCandidate>, String) -> Unit,
-    ) {
-        lifecycleScope.launch {
-            val persona = personas.getOrNull(personaIdx) ?: ""
-            repo.generateReplies(message, persona)
-                .onSuccess { onResult(it, "") }
-                .onFailure { onResult(emptyList(), it.message ?: "오류") }
-        }
-    }
-
-    private fun copyText(text: String) {
-        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        cm.setPrimaryClip(android.content.ClipData.newPlainText("cue", text))
-    }
 }
 
 @Composable
-private fun ReplyCard(reply: ReplyCandidate, onCopy: () -> Unit) {
+private fun ScenarioCard(scenario: ConversationScenario, partnerName: String, onCopy: () -> Unit) {
     Card(
         onClick = onCopy,
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(2.dp),
     ) {
-        Row(
-            modifier = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.Top,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Surface(color = Color(0xFFEDE9FE), shape = RoundedCornerShape(6.dp)) {
-                Text(reply.style, modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF7C3AED))
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // 헤더: 확률 + 제목
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Surface(color = Color(0xFF7C3AED), shape = RoundedCornerShape(20.dp)) {
+                    Text("${scenario.probability}%", modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                }
+                Text(scenario.title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF1F2937), modifier = Modifier.weight(1f))
             }
-            Text(reply.text, modifier = Modifier.weight(1f), fontSize = 15.sp, color = Color(0xFF1F2937), lineHeight = 22.sp)
+
+            HorizontalDivider(color = Color(0xFFF3F4F6))
+
+            // 대화 버블들
+            scenario.exchanges.forEach { ex ->
+                val isMe = ex.sender == "나"
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = if (isMe) Arrangement.End else Arrangement.Start,
+                ) {
+                    if (!isMe) {
+                        Column(horizontalAlignment = Alignment.Start, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(partnerName, fontSize = 10.sp, color = Color(0xFF9CA3AF))
+                            Surface(color = Color(0xFFF3F4F6), shape = RoundedCornerShape(4.dp, 12.dp, 12.dp, 12.dp)) {
+                                Text(ex.message, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp), fontSize = 13.sp, color = Color(0xFF1F2937))
+                            }
+                        }
+                    } else {
+                        Surface(color = Color(0xFF7C3AED), shape = RoundedCornerShape(12.dp, 4.dp, 12.dp, 12.dp)) {
+                            Text(ex.message, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp), fontSize = 13.sp, color = Color.White)
+                        }
+                    }
+                }
+            }
+
+            Text("탭하면 내 첫 답변 복사", fontSize = 11.sp, color = Color(0xFFD1D5DB), modifier = Modifier.align(Alignment.End))
         }
     }
 }

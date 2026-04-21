@@ -2,8 +2,8 @@ package com.ppailab.cue.reply
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ppailab.cue.api.ConversationScenario
 import com.ppailab.cue.api.PeopleSimRepository
-import com.ppailab.cue.api.ReplyCandidate
 import com.ppailab.cue.persona.PersonaStore
 import com.ppailab.cue.persona.SavedPersona
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -15,7 +15,7 @@ import javax.inject.Inject
 sealed class ReplyUiState {
     object Idle : ReplyUiState()
     object Loading : ReplyUiState()
-    data class Success(val replies: List<ReplyCandidate>) : ReplyUiState()
+    data class Success(val scenarios: List<ConversationScenario>) : ReplyUiState()
     data class Error(val message: String) : ReplyUiState()
 }
 
@@ -31,15 +31,13 @@ class ReplyViewModel @Inject constructor(
     private val _persona = MutableStateFlow<SavedPersona?>(null)
     val persona: StateFlow<SavedPersona?> = _persona
 
-    fun loadPersona(id: String) {
-        _persona.value = store.findById(id)
-    }
+    fun loadPersona(id: String) { _persona.value = store.findById(id) }
 
     fun generate(message: String) {
         val p = _persona.value
         viewModelScope.launch {
             _state.value = ReplyUiState.Loading
-            repo.generateReplies(context = message, persona = p?.persona ?: "")
+            repo.generateScenarios(message, p?.persona ?: "", p?.name ?: "상대방")
                 .onSuccess { _state.value = ReplyUiState.Success(it) }
                 .onFailure { _state.value = ReplyUiState.Error(it.message ?: "오류") }
         }

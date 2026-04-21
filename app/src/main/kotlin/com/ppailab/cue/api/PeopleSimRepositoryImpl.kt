@@ -37,6 +37,29 @@ data class AnalyzePersonaResponse(
     @SerializedName("error")   val error: String? = null,
 )
 
+data class ScenarioRequest(
+    @SerializedName("context") val context: String,
+    @SerializedName("persona") val persona: String = "",
+    @SerializedName("name")    val name: String = "상대방",
+)
+
+data class ScenarioExchange(
+    @SerializedName("sender")  val sender: String,
+    @SerializedName("message") val message: String,
+)
+
+data class ScenarioItem(
+    @SerializedName("probability") val probability: Int,
+    @SerializedName("title")       val title: String,
+    @SerializedName("exchanges")   val exchanges: List<ScenarioExchange>,
+)
+
+data class ScenarioResponse(
+    @SerializedName("ok")        val ok: Boolean,
+    @SerializedName("scenarios") val scenarios: List<ScenarioItem> = emptyList(),
+    @SerializedName("error")     val error: String? = null,
+)
+
 // ── Retrofit 서비스 ──────────────────────────────────────────────────────────
 
 interface CueApiService {
@@ -45,6 +68,9 @@ interface CueApiService {
 
     @POST("api/cue/analyze-persona")
     suspend fun analyzePersona(@Body req: AnalyzePersonaRequest): AnalyzePersonaResponse
+
+    @POST("api/cue/scenarios")
+    suspend fun getScenarios(@Body req: ScenarioRequest): ScenarioResponse
 }
 
 // ── Repository 구현 ──────────────────────────────────────────────────────────
@@ -62,6 +88,22 @@ class PeopleSimRepositoryImpl @Inject constructor(
         val resp = api.getReply(CueReplyRequest(context = context, persona = persona))
         if (!resp.ok) error(resp.error ?: "서버 오류")
         resp.replies.map { ReplyCandidate(it.style, it.text) }
+    }
+
+    override suspend fun generateScenarios(
+        context: String,
+        persona: String,
+        name: String,
+    ): Result<List<ConversationScenario>> = runCatching {
+        val resp = api.getScenarios(ScenarioRequest(context, persona, name))
+        if (!resp.ok) error(resp.error ?: "서버 오류")
+        resp.scenarios.map { s ->
+            ConversationScenario(
+                probability = s.probability,
+                title = s.title,
+                exchanges = s.exchanges.map { ChatExchange(it.sender, it.message) },
+            )
+        }
     }
 
     override suspend fun analyzePersona(

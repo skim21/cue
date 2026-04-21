@@ -22,6 +22,30 @@ class MockPeopleSimRepository @Inject constructor() : PeopleSimRepository {
         ))
     }
 
+    override suspend fun generateScenarios(
+        context: String, persona: String, name: String,
+    ): Result<List<ConversationScenario>> {
+        delay(1000L)
+        return Result.success(listOf(
+            ConversationScenario(50, "약속 잡기", listOf(
+                ChatExchange(name, context),
+                ChatExchange("나", "집에 있어! 너는?"),
+                ChatExchange(name, "나도~ 그럼 저녁에 밥 먹을래?"),
+            )),
+            ConversationScenario(30, "짧게 끝나는 대화", listOf(
+                ChatExchange(name, context),
+                ChatExchange("나", "바빠서 ㅠ 나중에 얘기해"),
+                ChatExchange(name, "ㅇㅇ 알겠어!"),
+            )),
+            ConversationScenario(20, "근황 공유", listOf(
+                ChatExchange(name, context),
+                ChatExchange("나", "그냥 쉬고 있어~ 요즘 어때?"),
+                ChatExchange(name, "나 요즘 일이 많아서 ㅠㅠ"),
+                ChatExchange("나", "힘들겠다ㅠ 화이팅!"),
+            )),
+        ))
+    }
+
     override suspend fun analyzePersona(
         name: String,
         messages: List<String>,
