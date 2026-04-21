@@ -37,6 +37,14 @@ jobs:
           echo "api.base.url=https://buddy.ppai-lab.com/" >> local.properties
           echo "api.key=none" >> local.properties
 
+      - name: Run Unit Tests
+        run: ./gradlew test --tests "com.ppailab.cue.*" 2>&1
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/cue.keystore
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: cue
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+
       - name: Build & Sign Release APK
         run: ./gradlew assembleRelease
         env:
