@@ -80,3 +80,11 @@ jobs:
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update landing page APK URL
+        run: |
+          APK_URL="https://github.com/skim21/cue/releases/download/${{ env.RELEASE_TAG }}/${{ env.APK_NAME }}"
+          curl -s -X POST "https://buddy.ppai-lab.com/api/cue/update-landing" \
+            -H "Content-Type: application/json" \
+            -d "{\"apk_url\": \"${APK_URL}\", \"version\": \"${{ env.RELEASE_TAG }}\", \"size_mb\": \"$(du -m ${{ env.APK_NAME }} | cut -f1)\"}" \
+            || true
