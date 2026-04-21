@@ -14,9 +14,13 @@
 -dontwarn okhttp3.**
 -dontwarn okio.**
 
-# Gson / JSON
+# Gson / JSON — 모든 data class 직렬화 보호
 -keep class com.google.gson.** { *; }
+-keep class com.ppailab.cue.api.** { *; }
 -keep class com.ppailab.cue.api.dto.** { *; }
+-keepclassmembers class com.ppailab.cue.** {
+    <fields>;
+}
 
 # Hilt
 -keep class dagger.hilt.** { *; }
@@ -29,9 +33,6 @@
 
 # Timber
 -dontwarn org.jetbrains.annotations.**
-
-# Keep data classes
--keep class com.ppailab.cue.api.ReplyCandidate { *; }
 
 # Kotlin
 -keep class kotlin.** { *; }
