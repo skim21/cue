@@ -3,48 +3,81 @@ name: Build & Release APK
 on:
   push:
     branches: [main]
-  workflow_dispatch:  # 수동 실행 가능
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  build:
+  # ── 유닛 테스트 (Mock, 네트워크 없음) ──────────────────────────
+  unit-test:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
-
-      - name: Make gradlew executable
-        run: chmod +x ./gradlew
-
-      - name: Decode keystore
-        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > cue.keystore
-
+      - uses: gradle/actions/setup-gradle@v3
+      - run: chmod +x ./gradlew
       - name: Create local.properties
         run: |
           echo "sdk.dir=$ANDROID_SDK_ROOT" >> local.properties
           echo "api.base.url=https://buddy.ppai-lab.com/" >> local.properties
           echo "api.key=none" >> local.properties
-
       - name: Run Unit Tests
-        run: ./gradlew testDebugUnitTest
-        env:
-          KEYSTORE_PATH: ${{ github.workspace }}/cue.keystore
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: cue
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew testDebugUnitTest --tests "com.ppailab.cue.MockRepositoryTest"
+      - name: Upload unit test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-report
+          path: app/build/reports/tests/testDebugUnitTest/
 
+  # ── 통합 테스트 (실제 서버 호출) ─────────────────────────────
+  integration-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      - uses: gradle/actions/setup-gradle@v3
+      - run: chmod +x ./gradlew
+      - name: Create local.properties
+        run: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" >> local.properties
+          echo "api.base.url=https://buddy.ppai-lab.com/" >> local.properties
+          echo "api.key=none" >> local.properties
+      - name: Run Integration Tests
+        run: ./gradlew testDebugUnitTest --tests "com.ppailab.cue.integration.ApiIntegrationTest"
+      - name: Upload integration test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-report
+          path: app/build/reports/tests/testDebugUnitTest/
+
+  # ── 빌드 & 릴리즈 (테스트 통과 후) ──────────────────────────
+  build:
+    runs-on: ubuntu-latest
+    needs: [unit-test, integration-test]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      - uses: gradle/actions/setup-gradle@v3
+      - run: chmod +x ./gradlew
+      - name: Decode keystore
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > cue.keystore
+      - name: Create local.properties
+        run: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" >> local.properties
+          echo "api.base.url=https://buddy.ppai-lab.com/" >> local.properties
+          echo "api.key=none" >> local.properties
       - name: Build & Sign Release APK
         run: ./gradlew assembleRelease
         env:
@@ -52,7 +85,6 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: cue
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-
       - name: Rename APK
         run: |
           VERSION=$(grep 'versionName' app/build.gradle.kts | grep -oP '"[^"]+"' | tr -d '"' | head -1)
@@ -60,7 +92,6 @@ jobs:
           mv app/build/outputs/apk/release/app-release.apk cue-v${VERSION}-build${BUILD}.apk
           echo "APK_NAME=cue-v${VERSION}-build${BUILD}.apk" >> $GITHUB_ENV
           echo "RELEASE_TAG=v${VERSION}-build${BUILD}" >> $GITHUB_ENV
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -80,7 +111,6 @@ jobs:
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Update landing page APK URL
         run: |
           APK_URL="https://github.com/skim21/cue/releases/download/${{ env.RELEASE_TAG }}/${{ env.APK_NAME }}"

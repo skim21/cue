@@ -1,17 +1,12 @@
 package com.ppailab.cue
 
 import com.ppailab.cue.api.MockPeopleSimRepository
+import com.ppailab.cue.api.ReplyCandidate
 import kotlinx.coroutines.test.runTest
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
+import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
 
-/**
- * MockPeopleSimRepository 단위 테스트.
- * 실제 API 호출 없이 정확히 3개의 후보를 반환하는지 검증한다.
- */
 class MockRepositoryTest {
 
     private lateinit var repository: MockPeopleSimRepository
@@ -21,82 +16,103 @@ class MockRepositoryTest {
         repository = MockPeopleSimRepository()
     }
 
-    @Test
-    fun `generateReplies returns exactly 3 candidates`() = runTest {
-        val result = repository.generateReplies(context = "안녕하세요")
+    // ── 기본 반환 검증 ──────────────────────────────────────────
 
-        assertTrue("Result should be success", result.isSuccess)
-        val candidates = result.getOrThrow()
-        assertEquals("Should return exactly 3 candidates", 3, candidates.size)
+    @Test
+    fun `정확히 3개 후보 반환`() = runTest {
+        val result = repository.generateReplies("안녕하세요")
+        assertTrue(result.isSuccess)
+        assertEquals(3, result.getOrThrow().size)
     }
 
     @Test
-    fun `generateReplies contains 공손 style`() = runTest {
-        val candidates = repository.generateReplies("테스트").getOrThrow()
-        val styles = candidates.map { it.style }
-        assertTrue("Should contain 공손 style", styles.contains("공손"))
+    fun `공손 스타일 포함`() = runTest {
+        val styles = repository.generateReplies("테스트").getOrThrow().map { it.style }
+        assertTrue(styles.contains("공손"))
     }
 
     @Test
-    fun `generateReplies contains 유머 style`() = runTest {
-        val candidates = repository.generateReplies("테스트").getOrThrow()
-        val styles = candidates.map { it.style }
-        assertTrue("Should contain 유머 style", styles.contains("유머"))
+    fun `유머 스타일 포함`() = runTest {
+        val styles = repository.generateReplies("테스트").getOrThrow().map { it.style }
+        assertTrue(styles.contains("유머"))
     }
 
     @Test
-    fun `generateReplies contains 단답 style`() = runTest {
-        val candidates = repository.generateReplies("테스트").getOrThrow()
-        val styles = candidates.map { it.style }
-        assertTrue("Should contain 단답 style", styles.contains("단답"))
+    fun `단답 스타일 포함`() = runTest {
+        val styles = repository.generateReplies("테스트").getOrThrow().map { it.style }
+        assertTrue(styles.contains("단답"))
     }
 
     @Test
-    fun `all candidates have non-empty text`() = runTest {
-        val candidates = repository.generateReplies("오늘 뭐 해?").getOrThrow()
-        candidates.forEach { candidate ->
-            assertFalse(
-                "Candidate '${candidate.style}' should have non-empty text",
-                candidate.text.isBlank()
-            )
+    fun `모든 후보 텍스트 비어있지 않음`() = runTest {
+        repository.generateReplies("오늘 뭐 해?").getOrThrow().forEach { c ->
+            assertFalse("'${c.style}' 텍스트가 비어있으면 안 됨", c.text.isBlank())
         }
     }
 
+    // ── 하드코딩 값 검증 ───────────────────────────────────────
+
     @Test
-    fun `generateReplies works with empty persona`() = runTest {
-        val result = repository.generateReplies(context = "밥 먹었어?", persona = "")
-        assertTrue("Result should be success with empty persona", result.isSuccess)
+    fun `공손 텍스트 하드코딩 일치`() = runTest {
+        val c = repository.generateReplies("감사합니다").getOrThrow().first { it.style == "공손" }
+        assertEquals("네, 알겠습니다. 감사합니다.", c.text)
+    }
+
+    @Test
+    fun `유머 텍스트 하드코딩 일치`() = runTest {
+        val c = repository.generateReplies("대박").getOrThrow().first { it.style == "유머" }
+        assertEquals("ㅋㅋ 진짜요? 대박이다", c.text)
+    }
+
+    @Test
+    fun `단답 텍스트 하드코딩 일치`() = runTest {
+        val c = repository.generateReplies("ㅇㅋ").getOrThrow().first { it.style == "단답" }
+        assertEquals("ㅇㅇ", c.text)
+    }
+
+    // ── 엣지 케이스 ────────────────────────────────────────────
+
+    @Test
+    fun `빈 persona 허용`() = runTest {
+        val result = repository.generateReplies("밥 먹었어?", persona = "")
+        assertTrue(result.isSuccess)
         assertEquals(3, result.getOrThrow().size)
     }
 
     @Test
-    fun `generateReplies works with custom persona`() = runTest {
-        val result = repository.generateReplies(
-            context = "주말에 뭐 해?",
-            persona = "친한 친구처럼 답장해"
-        )
-        assertTrue("Result should be success with custom persona", result.isSuccess)
+    fun `커스텀 persona 허용`() = runTest {
+        val result = repository.generateReplies("주말에 뭐 해?", persona = "친한 친구처럼 답장해")
+        assertTrue(result.isSuccess)
         assertEquals(3, result.getOrThrow().size)
     }
 
     @Test
-    fun `공손 reply matches expected hardcoded text`() = runTest {
-        val candidates = repository.generateReplies("감사합니다").getOrThrow()
-        val gongson = candidates.first { it.style == "공손" }
-        assertEquals("네, 알겠습니다. 감사합니다.", gongson.text)
+    fun `빈 context도 결과 반환`() = runTest {
+        val result = repository.generateReplies("")
+        assertTrue(result.isSuccess)
+        assertEquals(3, result.getOrThrow().size)
     }
 
     @Test
-    fun `유머 reply matches expected hardcoded text`() = runTest {
-        val candidates = repository.generateReplies("대박").getOrThrow()
-        val humor = candidates.first { it.style == "유머" }
-        assertEquals("ㅋㅋ 진짜요? 대박이다", humor.text)
+    fun `긴 context도 결과 반환`() = runTest {
+        val long = "오늘 학교에서 진짜 힘든 일이 있었어. 친구랑 싸웠는데 어떻게 화해해야 할지 모르겠어. 네 생각은 어때? 나는 진짜 화가 많이 났거든."
+        val result = repository.generateReplies(long)
+        assertTrue(result.isSuccess)
+        assertEquals(3, result.getOrThrow().size)
     }
 
     @Test
-    fun `단답 reply matches expected hardcoded text`() = runTest {
-        val candidates = repository.generateReplies("ㅇㅋ").getOrThrow()
-        val short = candidates.first { it.style == "단답" }
-        assertEquals("ㅇㅇ", short.text)
+    fun `스타일 순서는 공손-유머-단답`() = runTest {
+        val candidates = repository.generateReplies("테스트").getOrThrow()
+        assertEquals("공손", candidates[0].style)
+        assertEquals("유머", candidates[1].style)
+        assertEquals("단답", candidates[2].style)
+    }
+
+    @Test
+    fun `ReplyCandidate data class 동등성 확인`() {
+        val a = ReplyCandidate("공손", "안녕하세요")
+        val b = ReplyCandidate("공손", "안녕하세요")
+        assertEquals(a, b)
     }
 }
