@@ -26,6 +26,24 @@
             </intent-filter>
         </activity>
 
+        <!-- Import 액티비티: 카카오톡 대화 내보내기 .txt 공유 수신 -->
+        <activity
+            android:name=".share.ImportActivity"
+            android:exported="true"
+            android:label="Cue로 분석하기"
+            android:theme="@style/Theme.Cue">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+        </activity>
+
         <!-- ProcessText 액티비티: 텍스트 선택 시 공유 시트에 노출 -->
         <activity
             android:name=".processtext.ProcessTextActivity"

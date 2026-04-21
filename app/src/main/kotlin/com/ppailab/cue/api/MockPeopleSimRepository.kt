@@ -12,18 +12,21 @@ class MockPeopleSimRepository @Inject constructor() : PeopleSimRepository {
 
     override suspend fun generateReplies(
         context: String,
-        persona: String
+        persona: String,
     ): Result<List<ReplyCandidate>> {
-        Timber.d("[Mock] generateReplies called. context='%s'", context.take(50))
         delay(800L)
+        return Result.success(listOf(
+            ReplyCandidate("공손", "네, 알겠습니다. 감사합니다."),
+            ReplyCandidate("유머", "ㅋㅋ 진짜요? 대박이다"),
+            ReplyCandidate("단답", "ㅇㅇ"),
+        ))
+    }
 
-        val candidates = listOf(
-            ReplyCandidate(style = "공손", text = "네, 알겠습니다. 감사합니다."),
-            ReplyCandidate(style = "유머", text = "ㅋㅋ 진짜요? 대박이다"),
-            ReplyCandidate(style = "단답", text = "ㅇㅇ")
-        )
-
-        Timber.d("[Mock] returning %d candidates", candidates.size)
-        return Result.success(candidates)
+    override suspend fun analyzePersona(
+        name: String,
+        messages: List<String>,
+    ): Result<String> {
+        delay(1000L)
+        return Result.success("친근한 말투를 써요. 이모티콘을 자주 사용하고 감정 표현이 풍부해요.")
     }
 }

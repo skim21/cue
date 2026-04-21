@@ -60,4 +60,8 @@ class SetupViewModel @Inject constructor(
             _ui.update { it.copy(setupDone = true) }
         }
     }
+
+    fun markDone() {
+        viewModelScope.launch { settings.markSetupDone() }
+    }
 }
