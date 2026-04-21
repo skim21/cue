@@ -32,6 +32,7 @@ fun ReplyScreen(
     val state by vm.state.collectAsState()
     val persona by vm.persona.collectAsState()
     var message by remember { mutableStateOf("") }
+    var mode by remember { mutableStateOf("partner") }
     val snackState = remember { SnackbarHostState() }
     var snack by remember { mutableStateOf("") }
 
@@ -67,18 +68,38 @@ fun ReplyScreen(
                 }
             }
 
+            // 모드 토글
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                listOf("partner" to "상대방 먼저", "mine" to "내가 먼저").forEach { (value, label) ->
+                    val selected = mode == value
+                    Button(
+                        onClick = { mode = value; message = ""; if (state is ReplyUiState.Success) vm.reset() },
+                        modifier = Modifier.weight(1f).height(40.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (selected) Color(0xFF7C3AED) else Color(0xFFEDE9FE),
+                            contentColor = if (selected) Color.White else Color(0xFF7C3AED),
+                        ),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(0.dp),
+                    ) { Text(label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
+                }
+            }
+
             OutlinedTextField(
                 value = message,
                 onValueChange = { message = it; if (state is ReplyUiState.Success) vm.reset() },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("상대방 메시지") },
-                placeholder = { Text("받은 메시지를 입력하세요") },
+                label = { Text(if (mode == "mine") "원하는 것" else "상대방 메시지") },
+                placeholder = { Text(if (mode == "mine") "예: 용돈 올려줘" else "받은 메시지를 입력하세요") },
                 minLines = 2, maxLines = 4,
                 shape = RoundedCornerShape(12.dp),
             )
 
             Button(
-                onClick = { if (message.isNotBlank()) vm.generate(message) },
+                onClick = { if (message.isNotBlank()) vm.generate(message, mode) },
                 enabled = message.isNotBlank() && state !is ReplyUiState.Loading,
                 modifier = Modifier.fillMaxWidth().height(50.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED)),

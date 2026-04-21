@@ -33,11 +33,11 @@ class ReplyViewModel @Inject constructor(
 
     fun loadPersona(id: String) { _persona.value = store.findById(id) }
 
-    fun generate(message: String) {
+    fun generate(message: String, mode: String = "partner") {
         val p = _persona.value
         viewModelScope.launch {
             _state.value = ReplyUiState.Loading
-            repo.generateScenarios(message, p?.persona ?: "", p?.name ?: "상대방")
+            repo.generateScenarios(message, p?.persona ?: "", p?.name ?: "상대방", mode)
                 .onSuccess { _state.value = ReplyUiState.Success(it) }
                 .onFailure { _state.value = ReplyUiState.Error(it.message ?: "오류") }
         }

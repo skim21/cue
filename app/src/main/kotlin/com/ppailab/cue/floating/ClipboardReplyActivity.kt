@@ -45,6 +45,9 @@ class ClipboardReplyActivity : ComponentActivity() {
     private fun ScenarioSheet(clipboardText: String, onDismiss: () -> Unit) {
         val personas = remember { store.loadAll() }
         var selectedIdx by remember { mutableIntStateOf(0) }
+        var mode by remember { mutableStateOf("partner") }
+        var inputText by remember { mutableStateOf("") }
+        var generateTick by remember { mutableIntStateOf(0) }
         var scenarios by remember { mutableStateOf<List<ConversationScenario>>(emptyList()) }
         var loading by remember { mutableStateOf(false) }
         var error by remember { mutableStateOf("") }
@@ -55,11 +58,24 @@ class ClipboardReplyActivity : ComponentActivity() {
             if (snack.isNotEmpty()) { snackState.showSnackbar(snack); snack = "" }
         }
 
+        // partner 모드: clipboardText/selectedIdx 변경 시 자동 실행
         LaunchedEffect(clipboardText, selectedIdx) {
+            if (mode != "partner") return@LaunchedEffect
             if (clipboardText.isBlank()) return@LaunchedEffect
             val p = personas.getOrNull(selectedIdx)
             loading = true; error = ""; scenarios = emptyList()
-            repo.generateScenarios(clipboardText, p?.persona ?: "", p?.name ?: "상대방")
+            repo.generateScenarios(clipboardText, p?.persona ?: "", p?.name ?: "상대방", "partner")
+                .onSuccess { scenarios = it; loading = false }
+                .onFailure { error = it.message ?: "오류"; loading = false }
+        }
+
+        // mine 모드: generateTick 변경 시 실행
+        LaunchedEffect(generateTick) {
+            if (generateTick == 0) return@LaunchedEffect
+            if (inputText.isBlank()) return@LaunchedEffect
+            val p = personas.getOrNull(selectedIdx)
+            loading = true; error = ""; scenarios = emptyList()
+            repo.generateScenarios(inputText, p?.persona ?: "", p?.name ?: "상대방", "mine")
                 .onSuccess { scenarios = it; loading = false }
                 .onFailure { error = it.message ?: "오류"; loading = false }
         }
@@ -79,16 +95,59 @@ class ClipboardReplyActivity : ComponentActivity() {
                         TextButton(onClick = onDismiss) { Text("닫기", color = Color(0xFF9CA3AF)) }
                     }
 
-                    if (clipboardText.isBlank()) {
-                        Surface(color = Color(0xFFFEF3C7), shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
-                            Text("카톡 메시지를 먼저 복사하고 다시 탭해주세요", modifier = Modifier.padding(12.dp), fontSize = 14.sp, color = Color(0xFF92400E))
+                    // 모드 토글
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("partner" to "상대방 먼저", "mine" to "내가 먼저").forEach { (value, label) ->
+                            val selected = mode == value
+                            Button(
+                                onClick = { mode = value; inputText = ""; scenarios = emptyList(); error = "" },
+                                modifier = Modifier.weight(1f).height(38.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (selected) Color(0xFF7C3AED) else Color(0xFFEDE9FE),
+                                    contentColor = if (selected) Color.White else Color(0xFF7C3AED),
+                                ),
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(0.dp),
+                            ) { Text(label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
                         }
-                        return@ModalBottomSheet
                     }
 
-                    // 클립보드 미리보기
-                    Surface(color = Color(0xFFEDE9FE), shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
-                        Text(clipboardText, modifier = Modifier.padding(10.dp), fontSize = 13.sp, color = Color(0xFF5B21B6), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    if (mode == "partner") {
+                        if (clipboardText.isBlank()) {
+                            Surface(color = Color(0xFFFEF3C7), shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
+                                Text("카톡 메시지를 먼저 복사하고 다시 탭해주세요", modifier = Modifier.padding(12.dp), fontSize = 14.sp, color = Color(0xFF92400E))
+                            }
+                            return@ModalBottomSheet
+                        }
+                        // 클립보드 미리보기
+                        Surface(color = Color(0xFFEDE9FE), shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
+                            Text(clipboardText, modifier = Modifier.padding(10.dp), fontSize = 13.sp, color = Color(0xFF5B21B6), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        }
+                    } else {
+                        OutlinedTextField(
+                            value = inputText,
+                            onValueChange = { inputText = it; scenarios = emptyList(); error = "" },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("원하는 것") },
+                            placeholder = { Text("예: 용돈 올려줘") },
+                            minLines = 2, maxLines = 3,
+                            shape = RoundedCornerShape(10.dp),
+                        )
+                        if (inputText.isNotBlank()) {
+                            Button(
+                                onClick = { generateTick++ },
+                                enabled = !loading,
+                                modifier = Modifier.fillMaxWidth().height(44.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED)),
+                                shape = RoundedCornerShape(10.dp),
+                            ) {
+                                if (loading) {
+                                    CircularProgressIndicator(Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                                } else {
+                                    Text("시나리오 예측", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                                }
+                            }
+                        }
                     }
 
                     // 페르소나 선택

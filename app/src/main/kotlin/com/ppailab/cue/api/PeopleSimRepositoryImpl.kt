@@ -41,6 +41,7 @@ data class ScenarioRequest(
     @SerializedName("context") val context: String,
     @SerializedName("persona") val persona: String = "",
     @SerializedName("name")    val name: String = "상대방",
+    @SerializedName("mode")    val mode: String = "partner",
 )
 
 data class ScenarioExchange(
@@ -94,8 +95,9 @@ class PeopleSimRepositoryImpl @Inject constructor(
         context: String,
         persona: String,
         name: String,
+        mode: String,
     ): Result<List<ConversationScenario>> = runCatching {
-        val resp = api.getScenarios(ScenarioRequest(context, persona, name))
+        val resp = api.getScenarios(ScenarioRequest(context, persona, name, mode))
         if (!resp.ok) error(resp.error ?: "서버 오류")
         resp.scenarios.map { s ->
             ConversationScenario(

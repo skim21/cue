@@ -10,6 +10,7 @@ interface PeopleSimRepository {
         context: String,
         persona: String = "",
         name: String = "상대방",
+        mode: String = "partner",
     ): Result<List<ConversationScenario>>
 
     suspend fun analyzePersona(
