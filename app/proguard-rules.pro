@@ -18,6 +18,7 @@
 -keep class com.google.gson.** { *; }
 -keep class com.ppailab.cue.api.** { *; }
 -keep class com.ppailab.cue.api.dto.** { *; }
+-keep class com.ppailab.cue.persona.** { *; }
 -keepclassmembers class com.ppailab.cue.** {
     <fields>;
 }

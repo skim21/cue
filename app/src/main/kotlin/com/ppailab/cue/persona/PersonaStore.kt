@@ -2,7 +2,6 @@ package com.ppailab.cue.persona
 
 import android.content.Context
 import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.UUID
 import javax.inject.Inject
@@ -22,12 +21,12 @@ class PersonaStore @Inject constructor(
 ) {
     private val file = context.filesDir.resolve("personas.json")
     private val gson = Gson()
-    private val type = object : TypeToken<List<SavedPersona>>() {}.type
 
     fun loadAll(): List<SavedPersona> {
         if (!file.exists()) return emptyList()
-        return try { gson.fromJson<List<SavedPersona>>(file.readText(), type) ?: emptyList() }
-        catch (_: Exception) { emptyList() }
+        return try {
+            gson.fromJson(file.readText(), Array<SavedPersona>::class.java)?.toList() ?: emptyList()
+        } catch (_: Exception) { emptyList() }
     }
 
     fun save(persona: SavedPersona) {
